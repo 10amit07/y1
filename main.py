@@ -61,10 +61,30 @@ def analyze_image(image):
        - Identify brand names even with partial visibility.
        - Handle multiple product instances of different brands.
 
-    2. Expiry Date:
+     2. Expiry Date:
        - Support formats: DD/MM/YYYY, MM/YY, YYYY-MM-DD.
        - Convert all dates to DD/MM/YYYY format.
-       - Look for text patterns: "Expiry Date:", "Best Before:", "Use By:".
+       - Look for text patterns: "Expiry Date:", "Best Before:" [if best before (in months is given then calculate it)], "Use By:".
+         **Instructions for Expiry Date Formatting:**
+
+    - **Acceptable Input Formats:**
+      - **DD/MM/YYYY**
+      - **MM/YYYY** (e.g., 12/2025)
+      - **MM/YY** (e.g., 12/25)
+      - **YYYY-MM-DD**
+      - **DD-MM-YYYY**
+      - **DD.MM.YYYY**
+      - **Month Name Year** (e.g., December 2025)
+
+    - Conversion Rules
+      - If day is missing: Use `01` as the default day.
+        - **Example:** `12/2025` ➔ `01/12/2025`
+      - For two-digit years: Assume `20YY`.
+        - **Example:** `12/25` ➔ `01/12/2025`
+      - Convert month names to numeric format
+        - **Example:** `December 2025` ➔ `01/12/2025`
+
+    -Always return dates in `DD/MM/YYYY` format.
 
     3. Item Count:
        - Count identical products even when overlapping.
