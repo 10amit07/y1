@@ -161,7 +161,7 @@ def parse_product_details(analysis):
                 current_timestamp = datetime.now().astimezone().isoformat()
 
                 # Parse expiry date
-                expiry_date = datetime.strptime(data['expiry_date'], "%d/%m/%Y")
+                expiry_date = datetime.strptime(data['expiry_date'], "%dd/%mm/%YYYY")
                 current_date = datetime.now()
 
                 if expiry_date < current_date:
