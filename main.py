@@ -10,21 +10,14 @@ from google.oauth2 import service_account
 from google.cloud import aiplatform
 from datetime import datetime
 
+# Import ReportLab modules for PDF generation
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+
 # Initialize Streamlit page configuration
 st.set_page_config(page_title="FMCG Product Analyzer", layout="wide")
-
-
-hide_streamlit_style = """
-    <style>
-        #MainMenu {visibility: hidden;}
-        footer {display: none !important;}
-        header {visibility: hidden;}
-        .viewerBadge_container__1QSob {display: none !important;}
-        .css-1lsmgbg.egzxvld1 {display: none !important;}
-    </style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
 
 # Load Google Cloud credentials
 try:
@@ -36,7 +29,7 @@ try:
     vertexai.init(project=project_id, location="us-central1", credentials=credentials)
     
     # Initialize the Gemini model
-    model = GenerativeModel(st.secrets['GCP_MODEL_CRED'])
+    model = GenerativeModel("gemini-1.5-flash-002")
     st.success("Model loaded successfully")
 
 except Exception as e:
@@ -55,41 +48,101 @@ def analyze_image(image):
     image_part = Part.from_data(img_byte_arr, mime_type="image/png")
 
     prompt = """
-    The image can consist of multiple products. For every product in the image, do the following:
-    Analyze this FMCG product image and provide the following details for each product detected in JSON format:
+   Below is a comprehensive prompt you can provide to a Large Language Model (LLM) that explains the task, input/output requirements, and the reasoning steps it should follow. Adapt the prompt as needed for your specific LLM environment.
 
-    [
-        {
-            "brand": "Product brand name",
-            "expiry_date": "DD/MM/YYYY format. Extract from labels like 'Expiry Date', 'Best Before(if given in months, then calculate it from the date of manufacturing and then give it', 'Use By' CONVERT ALL THE DATES TO DD/MM/YYYY FORMAT ONLY. If no day is given, use 01 for day.",
-            "count": "Number of identical items visible in the image, accounting for overlapping and partial views"
-        },
-        {
-            "brand": "2nd product's brand name (IF IT EXISTS)",
-            "expiry_date": "2nd product's expiry date (IF IT EXISTS)",
-            "count": "2nd product's count (IF IT EXISTS)"
-        }, 
-        {
-        //and so on for other products
-        }
-    ]
+---
 
-    Requirements:
-    1. Brand Detection:
-       - Identify brand names even with partial visibility.
-       - Handle multiple product instances of different brands.
+**PROMPT START**
 
-    2. Expiry Date:
-       - Support formats: DD/MM/YYYY, MM/YYYY, MM/YY, YYYY-MM-DD, DD-MM-YYYY, DD.MM.YYYY, MonthName Year.
-       - CONVERT ALL THE DATES TO DD/MM/YYYY FORMAT ONLY. If no day is given, use 01 for day.
-       - For two-digit years, assume 20YY.
-       - Always return dates in DD/MM/YYYY format.
+You are an AI assistant that is provided with a single image containing one or more FMCG (Fast Moving Consumer Goods) products. Your task is to analyze the image and produce a structured JSON output containing detailed information about each product identified in the image. Follow the instructions carefully and produce the response strictly in the required format.
 
-    3. Item Count:
-       - Count identical products even when overlapping.
-       - Include partially visible items.
+### Input Description
+- You will be given a single image of some common FMCG product(s).
+- There can be multiple distinct products in the same image.
+- A product may appear multiple times in the same image.
 
-    Return only the JSON array without additional text.
+### What You Need To Identify
+1. **Brand:**  
+   - Identify the brand name of each distinct product visible in the image.  
+   - There might be text or logo cues on the packaging that you can use to determine the brand name.  
+   - If the brand is not recognizable or no brand is visible, output a best guess or "Unknown".
+
+2. **Expiry Date:**  
+   - Find and extract any expiry date information on the product packaging. The label might be indicated by phrases like "Expiry Date," "Best Before," "Use By," "BB," or similar.  
+   - The expiry date might be given in various formats, such as:  
+     - DD/MM/YYYY  
+     - MM/YY  
+     - DD-MM-YYYY  
+     - Only a month and year (MM/YYYY)  
+     - Only a year (YYYY)  
+     - Relative information like "Best before 6 months from manufacture date" (if a manufacture date is also visible).  
+   - **IMPORTANT** Convert all identified expiry date information into the format `DD/MM/YYYY` only.  
+     - If the day (DD) is missing, use `01` as the default day.  
+     - If the month (MM) is missing, use `01` (January) as the default month.  
+     - If only a year (YYYY) is given, assume `01/01/YYYY`.  
+     - If you need to compute a date from a given duration (e.g., "Best Before 6 months from a given manufacturing date"), add the specified duration to the manufacturing date and then format the resulting date as `DD/MM/YYYY`. If the computed day is unclear, choose the first day of the computed month. If no manufacturing day is given but a month/year is, assume the 1st of that month. If only a year is given, assume 01/01 of that year, then add the months.  
+   
+   Your goal is to present a single, best-guess expiry date in `DD/MM/YYYY` format.
+
+3. **Item Count:**  
+   - Count the number of identical units of each product visible in the image.  
+   - Handle scenarios such as overlapping items, partially occluded items, or products placed side-by-side.  
+   - Provide a best possible count based on the visible evidence in the image.
+
+### Handling Multiple Products
+- If the image contains multiple distinct products (e.g., Product A and Product B), you must output a JSON array containing one object per product.  
+- Each object in the array will contain:  
+  - `"brand"`: The detected brand name of the product.  
+  - `"expiry_date"`: The expiry date of the product in `DD/MM/YYYY` format following the rules above. If no expiry date is visible or cannot be inferred, return a sensible default such as `"01/01/2099"` (or another clearly invalid date placeholder if instructed).  
+  - `"count"`: The integer count of how many units of that product are visible in the image.
+
+### Output Format
+- Your final answer **must** be a JSON array of objects, where each object has the keys `brand`, `expiry_date`, and `count`.  
+- Example structure (pseudocode):
+  ```json
+  [
+    {
+      "brand": "Product brand name",
+      "expiry_date": "DD/MM/YYYY",
+      "count": 2
+    },
+    {
+      "brand": "Second product brand name",
+      "expiry_date": "DD/MM/YYYY",
+      "count": 1
+    }
+    // ... and so on for other products if they exist
+  ]
+  ```
+
+### Sample Output (For Illustration)
+```json
+[
+  {
+    "brand": "Nestle",
+    "expiry_date": "01/12/2024",
+    "count": 2
+  },
+  {
+    "brand": "Cadbury",
+    "expiry_date": "01/06/2025",
+    "count": 1
+  }
+]
+```
+
+### Important Notes
+- The date format is strict: Always `DD/MM/YYYY`. For missing components, make sensible assumptions as described.
+- If the product’s expiry date references a "Best Before" period from a manufacturing date, COMPUTE THE expected date as best as possible.
+- If no expiry date is found at all, provide a fallback date like `"NA"` to indicate no available data.
+- Ensure the count accurately reflects the number of identical items of that product in the image.
+- If there are multiple products, output one JSON object per product, all contained in a JSON array.
+
+Now, using these instructions, analyze the given image and produce the final JSON output.
+
+**PROMPT END**
+
+    Return only the JSON array of product objects without any additional text or formatting.
     """
 
     try:
@@ -102,134 +155,15 @@ def analyze_image(image):
                 "top_k": 32
             }
         )
-        # Clean the response text
         print(response.text)
+        # Clean the response text
         response_text = response.text.strip()
         # Remove any potential markdown code block markers
         response_text = re.sub(r'^```json\s*|\s*```$', '', response_text, flags=re.MULTILINE)
         return response_text
     except Exception as e:
-        print(response.text)
         st.error(f"Error in image analysis: {str(e)}")
         return None
-
-def normalize_date(date_str):
-    """
-    Normalize various date formats into DD/MM/YYYY format.
-    Rules:
-    - If day is missing, default to 01.
-    - If year is two digits, assume 20YY.
-    - Convert month names to numbers.
-    - Acceptable inputs (examples):
-      - DD/MM/YYYY
-      - MM/YYYY
-      - MM/YY
-      - YYYY-MM-DD
-      - DD-MM-YYYY
-      - DD.MM.YYYY
-      - MonthName YYYY (e.g., December 2025)
-    """
-
-    date_str = date_str.strip()
-
-    # Try direct DD/MM/YYYY first
-    try:
-        dt = datetime.strptime(date_str, "%d/%m/%Y")
-        return dt.strftime("%d/%m/%Y")
-    except:
-        pass
-
-    # If YYYY-MM-DD
-    try:
-        dt = datetime.strptime(date_str, "%Y-%m-%d")
-        return dt.strftime("%d/%m/%Y")
-    except:
-        pass
-
-    # If DD-MM-YYYY
-    try:
-        dt = datetime.strptime(date_str, "%d-%m-%Y")
-        return dt.strftime("%d/%m/%Y")
-    except:
-        pass
-
-    # If DD.MM.YYYY
-    try:
-        dt = datetime.strptime(date_str, "%d.%m.%Y")
-        return dt.strftime("%d/%m/%Y")
-    except:
-        pass
-
-    # Check if format is MM/YYYY or MM/YY (no day given)
-    # For MM/YYYY (e.g., 12/2023), default day to 01
-    # For MM/YY (e.g., 12/23), assume year 20YY and default day to 01
-    # We'll identify if it's something like "MM/YYYY" or "MM/YY" by splitting.
-    slash_parts = date_str.split('/')
-    if len(slash_parts) == 2:
-        # Could be MM/YYYY or MM/YY
-        mm, yy = slash_parts
-        mm = mm.strip()
-        yy = yy.strip()
-        # Validate month
-        if mm.isdigit():
-            month = int(mm)
-            if 1 <= month <= 12:
-                # Check year length
-                if len(yy) == 2:
-                    # Two-digit year
-                    year = int("20" + yy)
-                else:
-                    year = int(yy)
-
-                # Default day is 01
-                try:
-                    dt = datetime(year, month, 1)
-                    return dt.strftime("%d/%m/%Y")
-                except:
-                    pass
-
-    # Check for month name and year (e.g., December 2025)
-    # Extract month name and year
-    # We look for a pattern: MonthName Year
-    words = date_str.split()
-    if len(words) == 2:
-        month_name, year_str = words
-        month_name = month_name.capitalize()
-        if year_str.isdigit():
-            year = int(year_str)
-            # Convert month name to month number
-            try:
-                month_num = list(calendar.month_name).index(month_name)
-                dt = datetime(year, month_num, 1)
-                return dt.strftime("%d/%m/%Y")
-            except:
-                pass
-
-    # If we got here, date might be in another format. Try some heuristic:
-    # For example, MM/YY with '.' or '-' separators or something else.
-    # We'll try a few more common patterns.
-
-    # MM/YY (like 12/23)
-    # Already handled above with slash check, but try again with a different approach
-    # Just in case format is like "12/23" but didn't parse due to exceptions
-    slash_parts = date_str.split('/')
-    if len(slash_parts) == 2:
-        mm, yy = slash_parts
-        if mm.isdigit() and yy.isdigit():
-            month = int(mm)
-            if len(yy) == 2:
-                year = int("20" + yy)
-                try:
-                    dt = datetime(year, month, 1)
-                    return dt.strftime("%d/%m/%Y")
-                except:
-                    pass
-
-    # If none of the above worked, raise an exception
-    raise ValueError(f"Unrecognized date format: {date_str}")
-
-
-
 
 def parse_product_details(analysis):
     try:
@@ -275,20 +209,50 @@ def parse_product_details(analysis):
                         return None
 
             try:
-                # Add current timestamp
+                # Add current timestamp in ISO format with timezone
                 current_timestamp = datetime.now().astimezone().isoformat()
 
-                # Normalize and parse the expiry_date
-                normalized_date = normalize_date(data['expiry_date'])
-                expiry_date = datetime.strptime(normalized_date, "%d/%m/%Y")
+                # Parse expiry date with various formats
+                expiry_date_str = data['expiry_date'].strip()
+                expiry_date = None
+
+                # List of date formats to try
+                date_formats = ["%d/%m/%Y", "%d/%m/%y", "%m/%Y", "%m/%y", "%Y", "%y"]
+
+                for fmt in date_formats:
+                    try:
+                        parsed_date = datetime.strptime(expiry_date_str, fmt)
+
+                        # If day is missing, default to 1
+                        if '%d' not in fmt:
+                            parsed_date = parsed_date.replace(day=1)
+
+                        expiry_date = parsed_date
+                        break  # Exit the loop if parsing is successful
+                    except ValueError:
+                        continue
+
                 current_date = datetime.now()
 
-                if expiry_date < current_date:
-                    is_expired = "Yes"
-                    lifespan = "NA"
-                elif expiry_date > current_date:
-                    is_expired = "No"
-                    lifespan = (expiry_date - current_date).days
+                if expiry_date:
+                    # Compare dates based on available components
+                    if expiry_date.year < current_date.year:
+                        is_expired = "Yes"
+                    elif expiry_date.year == current_date.year:
+                        if expiry_date.month < current_date.month:
+                            is_expired = "Yes"
+                        elif expiry_date.month == current_date.month:
+                            if expiry_date.day < current_date.day:
+                                is_expired = "Yes"
+                            else:
+                                is_expired = "No"
+                        else:
+                            is_expired = "No"
+                    else:
+                        is_expired = "No"
+
+                    lifespan_days = (expiry_date - current_date).days
+                    lifespan = lifespan_days if lifespan_days >= 0 else "NA"
                 else:
                     is_expired = "NA"
                     lifespan = "NA"
@@ -297,7 +261,7 @@ def parse_product_details(analysis):
                     "Sl No": None,  # Will be assigned later
                     "Timestamp": current_timestamp,
                     "Brand": data['brand'].strip(),
-                    "Expiry Date": normalized_date,
+                    "Expiry Date": data['expiry_date'],
                     "Count": int(data['count']),
                     "Expired": is_expired,
                     "Expected Lifespan (Days)": lifespan
@@ -305,15 +269,12 @@ def parse_product_details(analysis):
 
                 parsed_products.append(parsed_product)
 
-            except ValueError as e:
-                st.error(f"Date parsing error for one of the products: {str(e)}")
+            except Exception as e:
+                st.error(f"Error processing product details: {str(e)}")
                 return None
 
         return parsed_products
 
-    except Exception as e:
-        st.error(f"Error parsing product details: {str(e)}")
-        return None
     except Exception as e:
         st.error(f"Error parsing product details: {str(e)}")
         return None
@@ -338,30 +299,91 @@ def update_product_data(products):
             product["Sl No"] = len(st.session_state.product_data) + 1
             st.session_state.product_data.append(product)
 
+def generate_pdf_report(data, filename):
+    try:
+        doc = SimpleDocTemplate(filename, pagesize=letter)
+        elements = []
+        
+        # Get styles
+        styles = getSampleStyleSheet()
+        
+        # Title
+        title = Paragraph("FMCG Product Analysis Report", styles['Title'])
+        elements.append(title)
+        elements.append(Spacer(1, 20))  # Add more space after title
+        
+        # Report generation date
+        date_text = Paragraph(f"Report Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles['Normal'])
+        elements.append(date_text)
+        elements.append(Spacer(1, 12))
+        
+        # Convert data to table format
+        table_data = [["Sl No", "Timestamp", "Brand", "Expiry Date", "Count", "Expired", "Expected Lifespan (Days)"]]
+        for item in data:
+            row = [
+                str(item.get("Sl No", "")),
+                item.get("Timestamp", "").split('T')[0],  # Format timestamp to show only date
+                item.get("Brand", ""),
+                item.get("Expiry Date", ""),
+                str(item.get("Count", "")),
+                item.get("Expired", ""),
+                str(item.get("Expected Lifespan (Days)", ""))
+            ]
+            table_data.append(row)
+        
+        # Create and style table
+        table = Table(table_data, repeatRows=1)  # Repeat header row on each page
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
+            ('ALIGN', (0, 1), (-1, -1), 'CENTER'),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('BOX', (0, 0), (-1, -1), 2, colors.black),
+            ('LINEBELOW', (0, 0), (-1, 0), 2, colors.black),
+        ]))
+        
+        elements.append(table)
+        doc.build(elements)
+        return True
+        
+    except Exception as e:
+        st.error(f"Error generating PDF report: {str(e)}")
+        return False
+
 def main():
     st.title("FMCG Product Analyzer and Tracker")
-    
+
     uploaded_file = st.file_uploader("Choose an image of FMCG products", type=["jpg", "jpeg", "png"])
-    
+
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
-        
+
         # Resize image for display
         max_width = 300
         ratio = max_width / image.width
         new_size = (max_width, int(image.height * ratio))
         resized_image = image.resize(new_size)
-        
+
         # Display resized image
         col1, col2 = st.columns([1, 2])
         with col1:
             st.image(resized_image, caption="Uploaded Image", use_container_width=True)
-        
+
         with col2:
             if st.button("Analyze Image"):
                 with st.spinner("Analyzing image..."):
                     analysis = analyze_image(image)
                     if analysis:
+                        # st.subheader("Raw Model Output:")
+                        # st.code(analysis, language="json")
+
                         products = parse_product_details(analysis)
                         if products:  # Valid products list
                             update_product_data(products)
@@ -369,7 +391,7 @@ def main():
                             for product in products:
                                 # Display product details
                                 st.markdown(f"**Product Details for {product['Brand']} (Expiry: {product['Expiry Date']}):**")
-                                display_fields = {k:v for k,v in product.items() if k not in ['Count', 'Sl No', 'Timestamp']}
+                                display_fields = {k:v for k,v in product.items() if k not in ['Sl No', 'Timestamp']}
                                 for key, value in display_fields.items():
                                     st.write(f"**{key}:** {value}")
                                 st.write("---")
@@ -377,18 +399,18 @@ def main():
                             st.error("Failed to parse product details. Please try again.")
                     else:
                         st.error("Unable to analyze the image. Please try again with a different image.")
-    
+
     st.subheader("Product Inventory")
     if st.session_state.product_data:
         df = pd.DataFrame(st.session_state.product_data)
-        
+
         # Reorder columns
         columns_order = [
-            'Sl No', 'Timestamp', 'Brand', 'Expiry Date', 
+            'Sl No', 'Timestamp', 'Brand', 'Expiry Date',
             'Count', 'Expired', 'Expected Lifespan (Days)'
         ]
         df = df[columns_order]
-        
+
         # Style the dataframe
         styled_df = df.style.set_properties(**{
             'text-align': 'left',
@@ -405,8 +427,24 @@ def main():
                 ('border', '1px solid #ddd')
             ]}
         ])
-        
+
         st.write(styled_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+
+        # Add option to generate report
+        if st.button("Generate PDF Report"):
+            # Generate report
+            report_generated = generate_pdf_report(st.session_state.product_data, "product_report.pdf")
+            if report_generated:
+                st.success("Report generated successfully!")
+                with open("product_report.pdf", "rb") as file:
+                    btn = st.download_button(
+                        label="Download PDF",
+                        data=file,
+                        file_name="product_report.pdf",
+                        mime="application/octet-stream"
+                    )
+            else:
+                st.error("Failed to generate report.")
     else:
         st.write("No products scanned yet.")
 
