@@ -72,7 +72,7 @@ def analyze_image(image):
 
     2. Expiry Date:
        - Support formats: DD/MM/YYYY, MM/YYYY, MM/YY, YYYY-MM-DD, DD-MM-YYYY, DD.MM.YYYY, MonthName Year.
-       - Convert all dates to DD/MM/YYYY format. If no day is given, use 01 for day.
+       - CONVERT ALL THE DATES TO DD/MM/YYYY FORMAT ONLY. If no day is given, use 01 for day.
        - For two-digit years, assume 20YY.
        - Always return dates in DD/MM/YYYY format.
 
