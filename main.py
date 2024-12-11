@@ -55,11 +55,17 @@ def analyze_image(image):
     image_part = Part.from_data(img_byte_arr, mime_type="image/png")
 
     prompt = """
+    The image can consist of multiple products. For every product in the image, do the following:
     Analyze this FMCG product image and provide the following details for each product detected in JSON format:
 
     [
         {
             "brand": "Product brand name",
+            "expiry_date": "DD/MM/YYYY format. Extract from labels like 'Expiry Date', 'Best Before', 'Use By'",
+            "count": "Number of identical items visible in the image, accounting for overlapping and partial views"
+        },
+        {
+            "brand": "2nd product (IF IT EXISTS)",
             "expiry_date": "DD/MM/YYYY format. Extract from labels like 'Expiry Date', 'Best Before', 'Use By'",
             "count": "Number of identical items visible in the image, accounting for overlapping and partial views"
         }
