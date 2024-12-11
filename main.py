@@ -38,7 +38,7 @@ try:
     vertexai.init(project=project_id, location="us-central1", credentials=credentials)
     
     # Initialize the model
-    model = GenerativeModel(st.secrets["GCP_MODEL_CRED"]
+    model = GenerativeModel(st.secrets["GCP_MODEL_CRED"])
     st.success("Model loaded successfully")
 
 except Exception as e:
