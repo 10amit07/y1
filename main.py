@@ -18,7 +18,16 @@ from reportlab.lib.styles import getSampleStyleSheet
 
 # Initialize Streamlit page configuration
 st.set_page_config(page_title="FMCG Product Analyzer", layout="wide")
-
+hide_streamlit_style = """
+    <style>
+        #MainMenu {visibility: hidden;}
+        footer {display: none !important;}
+        header {visibility: hidden;}
+        .viewerBadge_container__1QSob {display: none !important;}
+        .css-1lsmgbg.egzxvld1 {display: none !important;}
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 # Load Google Cloud credentials
 try:
     credentials_info = json.loads(st.secrets["GOOGLE_APPLICATION_CREDENTIALS"])
@@ -28,8 +37,8 @@ try:
     # Initialize Vertex AI
     vertexai.init(project=project_id, location="us-central1", credentials=credentials)
     
-    # Initialize the Gemini model
-    model = GenerativeModel("gemini-1.5-flash-002")
+    # Initialize the model
+    model = GenerativeModel(st.secrets["GCP_MODEL_CRED"]
     st.success("Model loaded successfully")
 
 except Exception as e:
