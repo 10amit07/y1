@@ -62,11 +62,7 @@ def analyze_image(image):
             "brand": "Product brand name",
             "expiry_date": "DD/MM/YYYY format. Extract from labels like 'Expiry Date', 'Best Before', 'Use By'",
             "count": "Number of identical items visible in the image, accounting for overlapping and partial views"
-        },
-        {
-            // Next product
         }
-        // Add more products as detected
     ]
 
     Requirements:
@@ -74,37 +70,17 @@ def analyze_image(image):
        - Identify brand names even with partial visibility.
        - Handle multiple product instances of different brands.
 
-     2. Expiry Date:
-       - Support formats: DD/MM/YYYY, MM/YY, YYYY-MM-DD.
-       - Convert all dates to DD/MM/YYYY format.
-       - Look for text patterns: "Expiry Date:", "Best Before:" [if best before (in months is given then calculate it)], "Use By:".
-         **Instructions for Expiry Date Formatting:**
-
-    - **Acceptable Input Formats:**
-      - **DD/MM/YYYY**
-      - **MM/YYYY** (e.g., 12/2025)
-      - **MM/YY** (e.g., 12/25)
-      - **YYYY-MM-DD**
-      - **DD-MM-YYYY**
-      - **DD.MM.YYYY**
-      - **Month Name Year** (e.g., December 2025)
-
-    - Conversion Rules
-      - If day is missing: Use `01` as the default day.
-        - **Example:** `12/2025` ➔ `01/12/2025`
-      - For two-digit years: Assume `20YY`.
-        - **Example:** `12/25` ➔ `01/12/2025`
-      - Convert month names to numeric format
-        - **Example:** `December 2025` ➔ `01/12/2025`
-
-    -Always return dates in `DD/MM/YYYY` format.
+    2. Expiry Date:
+       - Support formats: DD/MM/YYYY, MM/YYYY, MM/YY, YYYY-MM-DD, DD-MM-YYYY, DD.MM.YYYY, MonthName Year.
+       - Convert all dates to DD/MM/YYYY format. If no day is given, use 01 for day.
+       - For two-digit years, assume 20YY.
+       - Always return dates in DD/MM/YYYY format.
 
     3. Item Count:
        - Count identical products even when overlapping.
-       - Account for side-by-side placement.
        - Include partially visible items.
 
-    Return only the JSON array of product objects without any additional text or formatting.
+    Return only the JSON array without additional text.
     """
 
     try:
@@ -173,8 +149,8 @@ def parse_product_details(analysis):
                 # Add current timestamp in ISO format with timezone
                 current_timestamp = datetime.now().astimezone().isoformat()
 
-                # Parse expiry date
-                expiry_date = datetime.strptime(data['expiry_date'], "%dd/%mm/%YYYY")
+                # Parse the expiry date, assuming the model returns already in DD/MM/YYYY format
+                expiry_date = datetime.strptime(data['expiry_date'], "%d/%m/%Y")
                 current_date = datetime.now()
 
                 if expiry_date < current_date:
@@ -184,6 +160,7 @@ def parse_product_details(analysis):
                     is_expired = "No"
                     lifespan = (expiry_date - current_date).days
                 else:
+                    # If expiry_date == current_date
                     is_expired = "NA"
                     lifespan = "NA"
 
