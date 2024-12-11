@@ -61,13 +61,16 @@ def analyze_image(image):
     [
         {
             "brand": "Product brand name",
-            "expiry_date": "DD/MM/YYYY format. Extract from labels like 'Expiry Date', 'Best Before', 'Use By'",
+            "expiry_date": "DD/MM/YYYY format. Extract from labels like 'Expiry Date', 'Best Before(if given in months, then calculate it from the date of manufacturing and then give it', 'Use By' CONVERT ALL THE DATES TO DD/MM/YYYY FORMAT ONLY. If no day is given, use 01 for day.",
             "count": "Number of identical items visible in the image, accounting for overlapping and partial views"
         },
         {
-            "brand": "2nd product (IF IT EXISTS)",
-            "expiry_date": "DD/MM/YYYY format. Extract from labels like 'Expiry Date', 'Best Before', 'Use By'",
-            "count": "Number of identical items visible in the image, accounting for overlapping and partial views"
+            "brand": "2nd product's brand name (IF IT EXISTS)",
+            "expiry_date": "2nd product's expiry date (IF IT EXISTS)",
+            "count": "2nd product's count (IF IT EXISTS)"
+        }, 
+        {
+        //and so on for other products
         }
     ]
 
