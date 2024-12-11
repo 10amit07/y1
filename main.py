@@ -109,6 +109,7 @@ def analyze_image(image):
         response_text = re.sub(r'^```json\s*|\s*```$', '', response_text, flags=re.MULTILINE)
         return response_text
     except Exception as e:
+        print(response.text)
         st.error(f"Error in image analysis: {str(e)}")
         return None
 
