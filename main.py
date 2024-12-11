@@ -13,6 +13,19 @@ from datetime import datetime
 # Initialize Streamlit page configuration
 st.set_page_config(page_title="FMCG Product Analyzer", layout="wide")
 
+
+hide_streamlit_style = """
+    <style>
+        #MainMenu {visibility: hidden;}
+        footer {display: none !important;}
+        header {visibility: hidden;}
+        .viewerBadge_container__1QSob {display: none !important;}
+        .css-1lsmgbg.egzxvld1 {display: none !important;}
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+
 # Load Google Cloud credentials
 try:
     credentials_info = json.loads(st.secrets["GOOGLE_APPLICATION_CREDENTIALS"])
