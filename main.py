@@ -103,6 +103,124 @@ def analyze_image(image):
         st.error(f"Error in image analysis: {str(e)}")
         return None
 
+def normalize_date(date_str):
+    """
+    Normalize various date formats into DD/MM/YYYY format.
+    Rules:
+    - If day is missing, default to 01.
+    - If year is two digits, assume 20YY.
+    - Convert month names to numbers.
+    - Acceptable inputs (examples):
+      - DD/MM/YYYY
+      - MM/YYYY
+      - MM/YY
+      - YYYY-MM-DD
+      - DD-MM-YYYY
+      - DD.MM.YYYY
+      - MonthName YYYY (e.g., December 2025)
+    """
+
+    date_str = date_str.strip()
+
+    # Try direct DD/MM/YYYY first
+    try:
+        dt = datetime.strptime(date_str, "%d/%m/%Y")
+        return dt.strftime("%d/%m/%Y")
+    except:
+        pass
+
+    # If YYYY-MM-DD
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        return dt.strftime("%d/%m/%Y")
+    except:
+        pass
+
+    # If DD-MM-YYYY
+    try:
+        dt = datetime.strptime(date_str, "%d-%m-%Y")
+        return dt.strftime("%d/%m/%Y")
+    except:
+        pass
+
+    # If DD.MM.YYYY
+    try:
+        dt = datetime.strptime(date_str, "%d.%m.%Y")
+        return dt.strftime("%d/%m/%Y")
+    except:
+        pass
+
+    # Check if format is MM/YYYY or MM/YY (no day given)
+    # For MM/YYYY (e.g., 12/2023), default day to 01
+    # For MM/YY (e.g., 12/23), assume year 20YY and default day to 01
+    # We'll identify if it's something like "MM/YYYY" or "MM/YY" by splitting.
+    slash_parts = date_str.split('/')
+    if len(slash_parts) == 2:
+        # Could be MM/YYYY or MM/YY
+        mm, yy = slash_parts
+        mm = mm.strip()
+        yy = yy.strip()
+        # Validate month
+        if mm.isdigit():
+            month = int(mm)
+            if 1 <= month <= 12:
+                # Check year length
+                if len(yy) == 2:
+                    # Two-digit year
+                    year = int("20" + yy)
+                else:
+                    year = int(yy)
+
+                # Default day is 01
+                try:
+                    dt = datetime(year, month, 1)
+                    return dt.strftime("%d/%m/%Y")
+                except:
+                    pass
+
+    # Check for month name and year (e.g., December 2025)
+    # Extract month name and year
+    # We look for a pattern: MonthName Year
+    words = date_str.split()
+    if len(words) == 2:
+        month_name, year_str = words
+        month_name = month_name.capitalize()
+        if year_str.isdigit():
+            year = int(year_str)
+            # Convert month name to month number
+            try:
+                month_num = list(calendar.month_name).index(month_name)
+                dt = datetime(year, month_num, 1)
+                return dt.strftime("%d/%m/%Y")
+            except:
+                pass
+
+    # If we got here, date might be in another format. Try some heuristic:
+    # For example, MM/YY with '.' or '-' separators or something else.
+    # We'll try a few more common patterns.
+
+    # MM/YY (like 12/23)
+    # Already handled above with slash check, but try again with a different approach
+    # Just in case format is like "12/23" but didn't parse due to exceptions
+    slash_parts = date_str.split('/')
+    if len(slash_parts) == 2:
+        mm, yy = slash_parts
+        if mm.isdigit() and yy.isdigit():
+            month = int(mm)
+            if len(yy) == 2:
+                year = int("20" + yy)
+                try:
+                    dt = datetime(year, month, 1)
+                    return dt.strftime("%d/%m/%Y")
+                except:
+                    pass
+
+    # If none of the above worked, raise an exception
+    raise ValueError(f"Unrecognized date format: {date_str}")
+
+
+
+
 def parse_product_details(analysis):
     try:
         if not analysis or not isinstance(analysis, str):
@@ -147,11 +265,12 @@ def parse_product_details(analysis):
                         return None
 
             try:
-                # Add current timestamp in ISO format with timezone
+                # Add current timestamp
                 current_timestamp = datetime.now().astimezone().isoformat()
 
-                # Parse the expiry date, assuming the model returns already in DD/MM/YYYY format
-                expiry_date = datetime.strptime(data['expiry_date'], "%d/%m/%Y")
+                # Normalize and parse the expiry_date
+                normalized_date = normalize_date(data['expiry_date'])
+                expiry_date = datetime.strptime(normalized_date, "%d/%m/%Y")
                 current_date = datetime.now()
 
                 if expiry_date < current_date:
@@ -161,7 +280,6 @@ def parse_product_details(analysis):
                     is_expired = "No"
                     lifespan = (expiry_date - current_date).days
                 else:
-                    # If expiry_date == current_date
                     is_expired = "NA"
                     lifespan = "NA"
 
@@ -169,7 +287,7 @@ def parse_product_details(analysis):
                     "Sl No": None,  # Will be assigned later
                     "Timestamp": current_timestamp,
                     "Brand": data['brand'].strip(),
-                    "Expiry Date": data['expiry_date'],
+                    "Expiry Date": normalized_date,
                     "Count": int(data['count']),
                     "Expired": is_expired,
                     "Expected Lifespan (Days)": lifespan
@@ -183,6 +301,9 @@ def parse_product_details(analysis):
 
         return parsed_products
 
+    except Exception as e:
+        st.error(f"Error parsing product details: {str(e)}")
+        return None
     except Exception as e:
         st.error(f"Error parsing product details: {str(e)}")
         return None
