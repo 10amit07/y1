@@ -94,6 +94,7 @@ def analyze_image(image):
             }
         )
         # Clean the response text
+        print(response.text)
         response_text = response.text.strip()
         # Remove any potential markdown code block markers
         response_text = re.sub(r'^```json\s*|\s*```$', '', response_text, flags=re.MULTILINE)
