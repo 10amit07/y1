@@ -368,11 +368,24 @@ def generate_pdf_report(data, filename):
 
 def main():
     st.title("FMCG Product Analyzer and Tracker")
+        # Image input section
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        input_type = st.radio("Choose input method:", ["Upload Image", "Camera Input"])
+        
+        if input_type == "Upload Image":
+            uploaded_file = st.file_uploader("Choose an image of product", type=["jpg", "jpeg", "png"])
+            if uploaded_file is not None:
+                image = Image.open(uploaded_file)
+        else:
+            img_file = st.camera_input("Take a picture of product")
+            if img_file is not None:
+                image = Image.open(img_file)
+    # uploaded_file = st.file_uploader("Choose an image of FMCG products", type=["jpg", "jpeg", "png"])
 
-    uploaded_file = st.file_uploader("Choose an image of FMCG products", type=["jpg", "jpeg", "png"])
-
-    if uploaded_file is not None:
-        image = Image.open(uploaded_file)
+    # if uploaded_file is not None:
+    #     image = Image.open(uploaded_file)
 
         # Resize image for display
         max_width = 300
